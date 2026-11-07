@@ -1,0 +1,65 @@
+name: Gerar APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Preparar o jogo (offline)
+        run: |
+          mkdir www
+          mv index.html www/index.html
+          curl -fsSL https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js -o www/three.min.js
+          sed -i 's#https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js#three.min.js#g' www/index.html
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Criar projeto Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Aplicar icone e tela cheia
+        run: |
+          pip install pillow
+          python3 icones.py
+          cp MainActivity.java android/app/src/main/java/com/kadyworld/app/MainActivity.java
+
+      - name: Compilar APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Renomear APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk KadyWorld.apk
+
+      - name: Guardar APK (artefato)
+        uses: actions/upload-artifact@v4
+        with:
+          name: KadyWorld-apk
+          path: KadyWorld.apk
+
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Kady World APK ${{ github.run_number }}
+          files: KadyWorld.apk
